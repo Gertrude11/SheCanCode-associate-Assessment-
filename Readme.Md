@@ -7,11 +7,8 @@ A production-grade **Pay-Once Protocol** built in Java (Spring Boot). Ensures th
 
 ## Architecture Diagram
 
-```
-
 ![System Flowchart](flowchart.png)
 
-```
 
 ## Project Structure
 
