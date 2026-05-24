@@ -240,7 +240,6 @@ curl http://localhost:8080/api/v1/audit-log
   }
 ]
 ```
-
 ---
 
 ### GET /audit-log/{key}
@@ -250,10 +249,9 @@ Returns all events for one specific idempotency key.
 ```bash
 curl http://localhost:8080/api/v1/audit-log/550e8400-e29b-41d4-a716-446655440000
 ```
+---
 
 
-
-```
 
 ## Design Decisions
 
