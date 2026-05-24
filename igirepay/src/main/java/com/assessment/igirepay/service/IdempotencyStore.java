@@ -1,4 +1,4 @@
-package com.assessment.igirepay.idempotency;
+package com.assessment.igirepay.service;
 
 import com.assessment.igirepay.model.IdempotencyRecord;
 import com.assessment.igirepay.model.PaymentRequest;

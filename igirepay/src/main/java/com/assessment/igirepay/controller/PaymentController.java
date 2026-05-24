@@ -1,82 +1,91 @@
 package com.assessment.igirepay.controller;
 
+import com.assessment.igirepay.config.IdempotencyKeyValidator;
+import com.assessment.igirepay.enums.EventType;
+import com.assessment.igirepay.model.AuditEvent;
 import com.assessment.igirepay.model.PaymentRequest;
-import com.assessment.igirepay.model.PaymentResponse;
+import com.assessment.igirepay.service.AuditLogService;
 import com.assessment.igirepay.service.PaymentService;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-/**
- * The HTTP entry point for the payment API.
- *
- * This controller is intentionally thin. Its only job is to:
- *   1. Accept HTTP requests
- *   2. Extract and validate input
- *   3. Delegate to PaymentService
- *   4. Wrap the result in the right HTTP response
- *
- * Business logic lives in PaymentService, not here.
- */
+import java.util.List;
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/v1")
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final AuditLogService auditLogService;
+    private final IdempotencyKeyValidator keyValidator;
 
-    public PaymentController(PaymentService paymentService) {
+    public PaymentController(PaymentService paymentService,
+                             AuditLogService auditLogService,
+                             IdempotencyKeyValidator keyValidator) {
         this.paymentService = paymentService;
+        this.auditLogService = auditLogService;
+        this.keyValidator = keyValidator;
     }
 
-    /**
-     * POST /api/v1/process-payment
-     *
-     * Required header: Idempotency-Key: <unique-string>
-     * Body: { "amount": 100, "currency": "RWF" }
-     *
-     * Returns:
-     *   201 Created        → new payment processed
-     *   200 OK             → duplicate request, replayed from cache (+ X-Cache-Hit: true header)
-     *   400 Bad Request    → missing header or invalid body
-     *   422 Unprocessable  → key reused with a different body
-     */
     @PostMapping("/process-payment")
-    public ResponseEntity<PaymentResponse> processPayment(
+    public ResponseEntity<?> processPayment(
             @RequestHeader("Idempotency-Key") String idempotencyKey,
-            @Valid @RequestBody PaymentRequest request) {
+            @Valid @RequestBody PaymentRequest request,
+            HttpServletRequest httpRequest) {
 
-        // Validate the key isn't just whitespace
-        if (idempotencyKey.isBlank()) {
-            return ResponseEntity.badRequest().build();
+        String clientIp = httpRequest.getRemoteAddr();
+
+        //Validate key format before doing anything else
+        IdempotencyKeyValidator.ValidationResult validation = keyValidator.validate(idempotencyKey);
+        if (validation.isInvalid()) {
+            auditLogService.record(new AuditEvent(
+                    idempotencyKey,
+                    EventType.INVALID_KEY_FORMAT,
+                    validation.errorMessage(),
+                    clientIp
+            ));
+            return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+                    .body(Map.of(
+                            "error", validation.errorMessage(),
+                            "status", 422,
+                            "hint", "Generate a valid key with: UUID.randomUUID().toString()"
+                    ));
         }
 
-        PaymentService.PaymentResult result = paymentService.processPayment(idempotencyKey, request);
+        //Process the payment (service handles idempotency logic)
+        PaymentService.PaymentResult result = paymentService.processPayment(
+                idempotencyKey, request, clientIp);
 
         if (result.cacheHit()) {
-            // Duplicate request — return EXACT same body, status 200, with cache header
             return ResponseEntity.ok()
                     .header("X-Cache-Hit", "true")
                     .header("Idempotency-Key", idempotencyKey)
                     .body(result.response());
         }
 
-        // Fresh payment — return 201 Created
         return ResponseEntity.status(HttpStatus.CREATED)
                 .header("Idempotency-Key", idempotencyKey)
                 .body(result.response());
     }
+    /**
+     * GET /api/v1/audit-log
+     * Returns all audit events
+     */
+    @GetMapping("/audit-log")
+    public ResponseEntity<List<AuditEvent>> getAuditLog() {
+        return ResponseEntity.ok(auditLogService.getAll());
+    }
 
     /**
-     * GET /api/v1/health
-     * Simple health check for deployment verification.
+     * GET /api/v1/audit-log/{key}
+     * Returns all events for a specific idempotency key.
      */
-    @GetMapping("/health")
-    public ResponseEntity<Object> health() {
-        return ResponseEntity.ok(java.util.Map.of(
-                "status", "UP",
-                "service", "Idempotency Gateway",
-                "timestamp", java.time.Instant.now()
-        ));
+    @GetMapping("/audit-log/{key}")
+    public ResponseEntity<List<AuditEvent>> getAuditLogByKey(@PathVariable String key) {
+        return ResponseEntity.ok(auditLogService.getByKey(key));
     }
 }

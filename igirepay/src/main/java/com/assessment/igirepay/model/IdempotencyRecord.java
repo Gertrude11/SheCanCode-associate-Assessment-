@@ -11,16 +11,6 @@ import java.time.Instant;
  *
  * Each record tracks the lifecycle of a request associated with an
  * idempotency key and helps prevent duplicate processing.
- *
- * The record stores:
- * - The original request for conflict detection
- * - Processing status
- * - The generated response
- * - Timestamps for request tracking
- *
- * Status values:
- * IN_FLIGHT  - Request is currently being processed
- * COMPLETED  - Request processing finished and response was saved
  */
 @RequiredArgsConstructor
 @Getter
@@ -28,8 +18,8 @@ public class IdempotencyRecord {
 
 
     private final String idempotencyKey;
-    private final PaymentRequest originalRequest;  // Saved so we can detect body conflicts
-    private PaymentResponse response;              // Null until COMPLETED
+    private final PaymentRequest originalRequest;
+    private PaymentResponse response;
     private Status status;
     private final Instant createdAt;
     private Instant completedAt;
