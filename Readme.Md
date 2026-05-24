@@ -9,7 +9,7 @@ A production-grade **Pay-Once Protocol** built in Java (Spring Boot). Ensures th
 
 ```
 
-![System Flowchart](Payment Processing Flow Chart.png)
+![System Flowchart](flowchart.png)
 
 ```
 
